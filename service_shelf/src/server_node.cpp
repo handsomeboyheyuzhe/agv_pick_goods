@@ -37,6 +37,7 @@ typedef actionlib::SimpleActionServer<service_shelf::DoDishesAction> Server;
 Server *server_nh;
 static int Task=0,moveStage=3;
 static double car_x,car_y,car_a;
+static bool get_lidar_=false;
 static float cmd_speed_=0,cmd_steer_=0,cmd_lift_=0,lift_speed_=0,befor_angeldiff_lp_cp_=0;
 const double shelf_with=0.92;
 #define WORLD_CENTER_X 0.f
@@ -305,9 +306,9 @@ inline void MotionPlan_shelf(Pose cp,Pose lp,int &moveStage,Pose &befor_lp,float
 			// moveStage=9;
 			movespeed = 0;
 			liftpeed = 0;
-			angelspeed=0;
-      befor_angeldiff_lp_cp_=0;
-      Task=0;
+			angelspeed = 0;
+			befor_angeldiff_lp_cp_ = 0;
+			Task = 0;
 			//返回结束的状态
 		  server_nh->setSucceeded();
 		}
@@ -686,124 +687,134 @@ void getLaser(const sensor_msgs::LaserScan &laser) //得到雷达信息
         laserpoint.range=laser.ranges[i];
         polar_laser_points_.push_back(laserpoint);
       }
-      Pose cp(car_x,car_y,car_a);
-      std::vector<PillarLine> pillarlines = DetectPillar(cp, polar_laser_points_); //检测
-      std::vector<Pose> lps;
-      Pose lp;
-      std::cout << "lines size=" << pillarlines.size() << std::endl;
-      if (pillarlines.size() > 0)
-      {
-        for (int i = 0; i < pillarlines.size(); i++)
-        {
-          pillarlines[i].ShelfPose(lps);
-        }
-      }
-
-      //  for(int i=0;i<lps.size();i++)
-      // {
-      //     std::cout<<"lp"<<i<<"=[ "<<lps[i].x<<","<<lps[i].y<<","<<lps[i].a<<" ]"<<" ";
-      // }
-      if (lps.size() > 0)
-      {
-        lp = lps[0];
-        for (int i = 0; i < lps.size() - 1; i++)
-        {
-          for (int j = 0; j < lps.size() - i - 1; j++)
-          {
-            ToPi(lps[j].a);
-            ToPi(lps[j + 1].a);
-            if (abs(lps[j].a) > abs(lps[j + 1].a)) //probrom
-            {
-              Pose swap = lps[j + 1];
-              lps[j + 1] = lps[j];
-              lps[j] = swap;
-            }
-          }
-        }
-      }
-
-      for (int i = 0; i < lps.size(); i++)
-      {
-        std::cout << "lp" << i << "=[ " << lps[i].x << "," << lps[i].y << "," << lps[i].a * 180 / M_PI << " ]"
-                  << " ";
-      }
-      if (lps.size() == 1)
-        lp = lps[0];
-      if (lps.size() >= 2) //筛选最合适的边
-      {
-        float diss1 = lps[0].x * lps[0].x + lps[0].y * lps[0].y;
-        float diss2 = lps[1].x * lps[1].x + lps[1].y * lps[1].y;
-        std::cout << "angel=" << abs((lps[0].a - lps[1].a) * 180 / M_PI) << std::endl;
-        if (abs((lps[0].a - lps[1].a) * 180 / M_PI) < 10)
-        {
-          if (diss1 > diss2)
-          {
-            lp = lps[1];
-          }
-          else
-          {
-            lp = lps[0];
-          }
-        }
-        else
-        {
-          lp = lps[0];
-        }
-      }
-
-      std::cout << std::endl;
-      std::cout << "lps size=" << lps.size() << std::endl;
-      std::cout << "select lp=" << lp.x << " " << lp.y << " " << lp.a << std::endl;
-      std::cout << "befor_lp_=" << befor_lp_.a << " moveastage=" << moveStage << std::endl;
-      float disstance;
-      if (lp.a != 0)
-      {
-        float distance = sqrt(pow(lp.x, 2) + pow(lp.y, 2));
-        if (distance < 2.0 && distance > 0.1 && (moveStage == 1 || moveStage == 3 || moveStage == 2 || moveStage == 4 || moveStage == 7))
-        {
-          destpose_ = lp;
-          ToPi(destpose_.a);
-          float A = cp.a;
-          float X = lp.x + 0.15;
-
-          destpose_.x = X * cos(A) - lp.y * sin(A) + cp.x; //转换加位移
-          destpose_.y = X * sin(A) + lp.y * cos(A) + cp.y;
-          destpose_.a += cp.a - 5 * M_PI / 180;
-          float distance_eve_lp = sqrt(pow(befor_lp_.x - destpose_.x, 2) + pow(befor_lp_.y - destpose_.y, 2));
-          if (befor_lp_.a == 0 && abs((destpose_.a - cp.a) * 180 / M_PI) < 30)
-          {
-            befor_lp_ = destpose_;
-          }
-          else if (distance_eve_lp < 0.2)
-          {
-            befor_lp_ = destpose_;
-            disstance = sqrt(X * X + lp.y * lp.y);
-            if(abs(befor_lp_.a)<M_PI/4) //手动左右平移3厘米
-            {
-                befor_lp_.y+=0.03*sin(befor_lp_.a-M_PI/2);
-                befor_lp_.x+=0.03*cos(befor_lp_.a-M_PI/2);
-            }
-          }
-        }
-      }
-      // std::cout << destpose_.x *cos(cp.a)-destpose_.y*sin(cp.a)+cp.x<< " " << destpose_.x *sin(cp.a)+destpose_.y*cos(cp.a)+cp.y << " " << Mod2Pi(destpose_.a+cp.a) << "\n";
-      // std::cout<<"lp pose="<<lp.x<<" "<<lp.y<<" "<<lp.a*180/M_PI<<std::endl;
-      std::cout << "car and des=" << cp.x << " " << cp.y << " " << cp.a * 180 / M_PI << " to " << befor_lp_.x << " " << befor_lp_.y << " " << befor_lp_.a * 180 / M_PI << std::endl;
-      DrawLaserMapAndPillar("Laser", polar_laser_points_, cp, lps, befor_lp_ /*, cmdSeq*/);
-
-      //Pose liftPose[jarLines.size()];
-      // Pose car = ekf.GetRobotPose();
-      //Pose lp=                      //选择出角度相近的架子做目标
-      MotionPlan_shelf(cp, befor_lp_, moveStage, befor_lp_, disstance); //控制接入
-      std::cout << "\n";
+	  get_lidar_=true;
 }
-void execute(const service_shelf::DoDishesGoalConstPtr& goal, Server* as) 
+void execute(const service_shelf::DoDishesGoalConstPtr &goal, Server *as)
 {
-  // Do lots of awesome groundbreaking robot stuff here
-  Task=goal->lift_mode;
-  //as->setSucceeded();
+	// Do lots of awesome groundbreaking robot stuff here
+	Task = goal->lift_mode;
+
+	while (true)
+	{
+		if (get_lidar_)
+		{
+			Pose cp(car_x, car_y, car_a);
+			std::vector<PillarLine> pillarlines = DetectPillar(cp, polar_laser_points_); //检测
+			std::vector<Pose> lps;
+			Pose lp;
+			std::cout << "lines size=" << pillarlines.size() << std::endl;
+			if (pillarlines.size() > 0)
+			{
+				for (int i = 0; i < pillarlines.size(); i++)
+				{
+					pillarlines[i].ShelfPose(lps);
+				}
+			}
+
+			//  for(int i=0;i<lps.size();i++)
+			// {
+			//     std::cout<<"lp"<<i<<"=[ "<<lps[i].x<<","<<lps[i].y<<","<<lps[i].a<<" ]"<<" ";
+			// }
+			if (lps.size() > 0)
+			{
+				lp = lps[0];
+				for (int i = 0; i < lps.size() - 1; i++)
+				{
+					for (int j = 0; j < lps.size() - i - 1; j++)
+					{
+						ToPi(lps[j].a);
+						ToPi(lps[j + 1].a);
+						if (abs(lps[j].a) > abs(lps[j + 1].a)) //probrom
+						{
+							Pose swap = lps[j + 1];
+							lps[j + 1] = lps[j];
+							lps[j] = swap;
+						}
+					}
+				}
+			}
+
+			for (int i = 0; i < lps.size(); i++)
+			{
+				std::cout << "lp" << i << "=[ " << lps[i].x << "," << lps[i].y << "," << lps[i].a * 180 / M_PI << " ]"
+						  << " ";
+			}
+			if (lps.size() == 1)
+				lp = lps[0];
+			if (lps.size() >= 2) //筛选最合适的边
+			{
+				float diss1 = lps[0].x * lps[0].x + lps[0].y * lps[0].y;
+				float diss2 = lps[1].x * lps[1].x + lps[1].y * lps[1].y;
+				std::cout << "angel=" << abs((lps[0].a - lps[1].a) * 180 / M_PI) << std::endl;
+				if (abs((lps[0].a - lps[1].a) * 180 / M_PI) < 10)
+				{
+					if (diss1 > diss2)
+					{
+						lp = lps[1];
+					}
+					else
+					{
+						lp = lps[0];
+					}
+				}
+				else
+				{
+					lp = lps[0];
+				}
+			}
+
+			std::cout << std::endl;
+			std::cout << "lps size=" << lps.size() << std::endl;
+			std::cout << "select lp=" << lp.x << " " << lp.y << " " << lp.a << std::endl;
+			std::cout << "befor_lp_=" << befor_lp_.a << " moveastage=" << moveStage << std::endl;
+			float disstance;
+			if (lp.a != 0)
+			{
+				float distance = sqrt(pow(lp.x, 2) + pow(lp.y, 2));
+				if (distance < 2.0 && distance > 0.1 && (moveStage == 1 || moveStage == 3 || moveStage == 2 || moveStage == 4 || moveStage == 7))
+				{
+					destpose_ = lp;
+					ToPi(destpose_.a);
+					float A = cp.a;
+					float X = lp.x + 0.15;
+
+					destpose_.x = X * cos(A) - lp.y * sin(A) + cp.x; //转换加位移
+					destpose_.y = X * sin(A) + lp.y * cos(A) + cp.y;
+					destpose_.a += cp.a - 5 * M_PI / 180;
+					float distance_eve_lp = sqrt(pow(befor_lp_.x - destpose_.x, 2) + pow(befor_lp_.y - destpose_.y, 2));
+					if (befor_lp_.a == 0 && abs((destpose_.a - cp.a) * 180 / M_PI) < 90)
+					{
+						befor_lp_ = destpose_;
+					}
+					else if (distance_eve_lp < 0.2)
+					{
+						befor_lp_ = destpose_;
+						disstance = sqrt(X * X + lp.y * lp.y);
+						if (abs(befor_lp_.a) < M_PI / 4) //手动左右平移3厘米
+						{
+							befor_lp_.y += 0.03 * sin(befor_lp_.a - M_PI / 2);
+							befor_lp_.x += 0.03 * cos(befor_lp_.a - M_PI / 2);
+						}
+					}
+				}
+			}
+			// std::cout << destpose_.x *cos(cp.a)-destpose_.y*sin(cp.a)+cp.x<< " " << destpose_.x *sin(cp.a)+destpose_.y*cos(cp.a)+cp.y << " " << Mod2Pi(destpose_.a+cp.a) << "\n";
+			// std::cout<<"lp pose="<<lp.x<<" "<<lp.y<<" "<<lp.a*180/M_PI<<std::endl;
+			std::cout << "car and des=" << cp.x << " " << cp.y << " " << cp.a * 180 / M_PI << " to " << befor_lp_.x << " " << befor_lp_.y << " " << befor_lp_.a * 180 / M_PI << std::endl;
+			DrawLaserMapAndPillar("Laser", polar_laser_points_, cp, lps, befor_lp_ /*, cmdSeq*/);
+
+			//Pose liftPose[jarLines.size()];
+			// Pose car = ekf.GetRobotPose();
+			//Pose lp=                      //选择出角度相近的架子做目标
+			MotionPlan_shelf(cp, befor_lp_, moveStage, befor_lp_, disstance); //控制接入
+			std::cout << "\n";
+		}
+		get_lidar_ = false;
+		std::cout << "the error no use" << std::endl;
+		sleep(1);
+	}
 }
- 
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "do_dishes_server");

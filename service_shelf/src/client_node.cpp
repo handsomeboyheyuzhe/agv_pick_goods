@@ -41,7 +41,7 @@ int main(int argc, char** argv)
   client.waitForServer(); // Waits for the ActionServer to connect to this client
   service_shelf::DoDishesGoal goal;
   // Fill in goal here
-  goal.task=1;
+  goal.lift_mode=1;
   client.sendGoal(goal); // Sends a goal to the ActionServer
   client.waitForResult(ros::Duration(5.0)); // Blocks until this goal finishes
   if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
