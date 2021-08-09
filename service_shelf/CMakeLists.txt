@@ -130,9 +130,8 @@ catkin_package(
 include_directories(
 # include
 ${catkin_INCLUDE_DIRS}
-
 )
-
+aux_source_directory(src/ SRC_LIST)
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/service_shelf.cpp
@@ -221,10 +220,7 @@ ${catkin_INCLUDE_DIRS}
 #target_link_libraries(server_node pthread ${catkin_LIBRARIES} ${Boost_LIBRARIES} ${OpenCV_LIBS})
 #add_dependencies(server_node service_shelf_gencpp)
 
-add_executable(server_node src/server_node.cpp)
+#add_executable(server_node src/server_node.cpp src/jar.cpp)
+add_executable(server_node ${SRC_LIST})
 target_link_libraries(server_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(server_node service_shelf_gencpp)
-
-add_executable(client_node src/client_node.cpp)
-target_link_libraries(client_node ${catkin_LIBRARIES})
-add_dependencies(client_node service_shelf_gencpp)
